@@ -43,26 +43,35 @@ fn main() -> Result<(), io::Error> {
         sys.refresh_all();
         let mut processes: Vec<_> = sys.processes().iter().collect();
 
-        terminal.draw(|f| {
-            let area = f.area();
+        terminal.draw(|frame| {
+            let area = frame.area();
 
             let cpus = sys.cpus();
-            let chunk = Layout::default()
+            let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
-                    Constraint::Length(3),
-                    Constraint::Length((cpus.len()) as u16),
+                    Constraint::Length((cpus.len() + 1) as u16),
                     Constraint::Min(10),
                 ])
                 .split(area);
 
+            let system_layout = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length((cpus.len()) as u16),
+                    Constraint::Length(1),
+                ])
+                .split(layout[0]);
+
             let used_memory = sys.used_memory() / mb;
             let total_memory = sys.total_memory() / mb;
+            let used_swap = sys.used_swap() / mb;
+            let total_swap = sys.total_swap() / mb;
 
             let cpu_chunk = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(cpus.iter().map(|_| Constraint::Length(1)))
-                .split(chunk[1]);
+                .split(system_layout[0]);
 
             for (i, cpu) in cpus.iter().enumerate() {
                 let usage = cpu.cpu_usage();
@@ -74,18 +83,24 @@ fn main() -> Result<(), io::Error> {
                     .block(Block::default().borders(Borders::empty()))
                     .percent(usage.round() as u16)
                     .label(format!("{:.1}%", usage));
-                f.render_widget(name, bar_layout[0]);
-                f.render_widget(gauge, bar_layout[1]);
+                frame.render_widget(name, bar_layout[0]);
+                frame.render_widget(gauge, bar_layout[1]);
             }
 
-            let stat = Paragraph::new(format!("Memory: {} MB/ {} MB", used_memory, total_memory))
-                .block(
-                    Block::default()
-                        .title("System status")
-                        .borders(Borders::all()),
-                );
+            let stat_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50); 2])
+                .split(system_layout[1]);
 
-            f.render_widget(stat, chunk[0]);
+            frame.render_widget(
+                Paragraph::new(format!("Memory: {}MB / {}MB", used_memory, total_memory)),
+                stat_layout[0],
+            );
+
+            frame.render_widget(
+                Paragraph::new(format!("Swap Memory: {}MB / {}MB", used_swap, total_swap)),
+                stat_layout[1],
+            );
 
             match sorting_mode {
                 SortingMode::Memory => {
@@ -97,7 +112,7 @@ fn main() -> Result<(), io::Error> {
                 }
             }
 
-            let visible_height = chunk[2].height as usize - 3;
+            let visible_height = layout[1].height as usize - 3;
 
             let start = if selected >= visible_height {
                 selected - visible_height + 1
@@ -173,10 +188,10 @@ fn main() -> Result<(), io::Error> {
             )
             .block(Block::default().title("Process").borders(Borders::all()));
 
-            f.render_stateful_widget(table, chunk[2], &mut state);
+            frame.render_stateful_widget(table, layout[1], &mut state);
         })?;
 
-        if event::poll(Duration::from_millis(0))? {
+        if event::poll(Duration::from_millis(1000))? {
             if let Event::Key(key) = event::read()? {
                 match key.code {
                     KeyCode::Down | KeyCode::Char('j') => {
@@ -201,10 +216,6 @@ fn main() -> Result<(), io::Error> {
                     _ => {}
                 }
             }
-        }
-
-        if last_refresh.elapsed() >= refresh_rate {
-            sys.refresh_all();
         }
     }
     disable_raw_mode()?;
