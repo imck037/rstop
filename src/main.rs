@@ -1,5 +1,5 @@
 use std::{
-    io,
+    fs, io,
     time::{Duration, Instant},
 };
 
@@ -37,8 +37,6 @@ fn main() -> Result<(), io::Error> {
     let mut sorting_mode = SortingMode::Memory;
     let mut selected = 0usize;
     let mb = 1024 * 1024;
-    let refresh_rate = Duration::from_millis(200);
-    let last_refresh = Instant::now();
     loop {
         sys.refresh_all();
         let mut processes: Vec<_> = sys.processes().iter().collect();
@@ -49,35 +47,36 @@ fn main() -> Result<(), io::Error> {
             let cpus = sys.cpus();
             let layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length((cpus.len() + 1) as u16),
-                    Constraint::Min(10),
-                ])
+                .constraints([Constraint::Max((cpus.len()) as u16), Constraint::Min(10)])
                 .split(area);
-
-            let system_layout = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length((cpus.len()) as u16),
-                    Constraint::Length(1),
-                ])
-                .split(layout[0]);
 
             let used_memory = sys.used_memory() / mb;
             let total_memory = sys.total_memory() / mb;
             let used_swap = sys.used_swap() / mb;
             let total_swap = sys.total_swap() / mb;
 
-            let cpu_chunk = Layout::default()
+            let read_uptime = fs::read_to_string("/proc/uptime").unwrap();
+            let uptime_stat: Vec<&str> = read_uptime.split(".").collect();
+            let uptime: usize = uptime_stat[0].parse::<usize>().unwrap();
+
+            let uptime_format =
+                format!("{}:{}:{}", uptime / 3600, (uptime % 3600) / 60, uptime % 60);
+
+            let system_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Percentage(50); 2])
+                .split(layout[0]);
+
+            let cpu_layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints(cpus.iter().map(|_| Constraint::Length(1)))
-                .split(system_layout[0]);
+                .split(system_layout[1]);
 
             for (i, cpu) in cpus.iter().enumerate() {
                 let usage = cpu.cpu_usage();
                 let name = cpu.name();
                 let bar_layout = Layout::horizontal([Constraint::Length(10), Constraint::Min(20)])
-                    .split(cpu_chunk[i]);
+                    .split(cpu_layout[i]);
                 let gauge = Gauge::default()
                     .style(Style::new().bg(Color::Reset).fg(Color::DarkGray))
                     .block(Block::default().borders(Borders::empty()))
@@ -87,20 +86,13 @@ fn main() -> Result<(), io::Error> {
                 frame.render_widget(gauge, bar_layout[1]);
             }
 
-            let stat_layout = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Percentage(50); 2])
-                .split(system_layout[1]);
+            let stat: Vec<String> = vec![
+                format!("Memory: {}MB/{}MB", used_memory, total_memory),
+                format!("Swap: {}MB/{}MB", used_swap, total_swap),
+                format!("Uptime: {}", uptime_format),
+            ];
 
-            frame.render_widget(
-                Paragraph::new(format!("Memory: {}MB / {}MB", used_memory, total_memory)),
-                stat_layout[0],
-            );
-
-            frame.render_widget(
-                Paragraph::new(format!("Swap Memory: {}MB / {}MB", used_swap, total_swap)),
-                stat_layout[1],
-            );
+            frame.render_widget(Paragraph::new(stat.join("\n")), system_layout[0]);
 
             match sorting_mode {
                 SortingMode::Memory => {
