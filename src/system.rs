@@ -28,3 +28,15 @@ pub fn get_memory() -> (usize, usize, usize, usize, usize) {
     let used = total - free - bufferes - cached;
     (total, used, free, bufferes, cached)
 }
+
+pub fn get_swap() -> Option<(usize, usize)> {
+    if let Ok(swap_details) = fs::read_to_string("/proc/swaps") {
+        let line: Vec<&str> = swap_details.lines().collect();
+        let content: Vec<&str> = line[1].split_whitespace().collect();
+        let total = content[2].parse::<usize>().unwrap();
+        let used = content[3].parse::<usize>().unwrap();
+        Some((total, used))
+    } else {
+        None
+    }
+}
