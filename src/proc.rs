@@ -5,20 +5,22 @@ use std::{
 
 use crate::task::is_pid;
 
-struct Process {
-    pid: String,
-    name: String,
-    cpu: usize,
-    memory: String,
+pub struct Process {
+    pub pid: String,
+    pub name: String,
+    pub status: String,
+    pub cpu: usize,
+    pub memory: String,
 }
 
-pub fn get_process() {
+pub fn get_process() -> Vec<Process> {
+    let mut processes: Vec<Process> = Vec::new();
     if let Ok(entries) = fs::read_dir("/proc") {
-        let mut process: Vec<Process> = Vec::new();
         for entry in entries.flatten() {
             let mut name = String::new();
             let mut memory = String::new();
             let mut cpu: usize = 0;
+            let mut status = String::new();
             let filename = entry.file_name();
             let pid = filename.to_string_lossy();
             if !is_pid(&pid) {
@@ -29,6 +31,7 @@ pub fn get_process() {
             if let Ok(content) = fs::read_to_string(stat_path) {
                 let parts: Vec<&str> = content.split_whitespace().collect();
                 name = parts[1].to_string();
+                status = parts[3].to_string();
                 cpu = parts[13].parse::<usize>().unwrap() + parts[14].parse::<usize>().unwrap();
             }
 
@@ -47,11 +50,13 @@ pub fn get_process() {
             }
             let ps1 = Process {
                 pid: pid.to_string(),
-                name: name,
-                memory: memory,
-                cpu: cpu,
+                name,
+                status,
+                memory,
+                cpu,
             };
-            process.push(ps1);
+            processes.push(ps1);
         }
     }
+    processes
 }

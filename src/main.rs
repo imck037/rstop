@@ -1,7 +1,8 @@
-use std::{
-    fs, io,
-    time::{Duration, Instant},
-};
+mod proc;
+mod system;
+mod task;
+mod test;
+use std::{io, time::Duration};
 
 use crossterm::{
     self,
@@ -16,7 +17,6 @@ use ratatui::{
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Gauge, Paragraph, Row, Table, TableState},
 };
-use sysinfo::System;
 
 #[derive(PartialEq)]
 enum SortingMode {
@@ -32,35 +32,34 @@ fn main() -> Result<(), io::Error> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut sys = System::new_all();
+    let mut prev_cpus = system::get_cpu_stat();
 
     let mut sorting_mode = SortingMode::Memory;
     let mut selected = 0usize;
-    let mb = 1024 * 1024;
     loop {
-        sys.refresh_all();
-        let mut processes: Vec<_> = sys.processes().iter().collect();
+        let mut processes = proc::get_process();
 
         terminal.draw(|frame| {
             let area = frame.area();
+            let curr_cpus = system::get_cpu_stat();
+            let cpus = system::get_cpu_usage(&prev_cpus, &curr_cpus);
 
-            let cpus = sys.cpus();
             let layout = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Max((cpus.len()) as u16), Constraint::Min(10)])
                 .split(area);
 
-            let used_memory = sys.used_memory() / mb;
-            let total_memory = sys.total_memory() / mb;
-            let used_swap = sys.used_swap() / mb;
-            let total_swap = sys.total_swap() / mb;
+            let (total_memory, used_memory, ..) = system::get_memory();
 
-            let read_uptime = fs::read_to_string("/proc/uptime").unwrap();
-            let uptime_stat: Vec<&str> = read_uptime.split(".").collect();
-            let uptime: usize = uptime_stat[0].parse::<usize>().unwrap();
+            let mut total_swap = 0;
+            let mut used_swap = 0;
+            if let Some((total, used)) = system::get_swap() {
+                total_swap = total / 1024;
+                used_swap = used / 1024;
+            }
 
-            let uptime_format =
-                format!("{}:{}:{}", uptime / 3600, (uptime % 3600) / 60, uptime % 60);
+            let uptime = system::get_uptime();
+            let (total_task, running_task, .., total_threads) = task::tasks();
 
             let system_layout = Layout::default()
                 .direction(Direction::Horizontal)
@@ -73,8 +72,8 @@ fn main() -> Result<(), io::Error> {
                 .split(system_layout[1]);
 
             for (i, cpu) in cpus.iter().enumerate() {
-                let usage = cpu.cpu_usage();
-                let name = cpu.name();
+                let usage = cpu.usage;
+                let name = cpu.id.to_string();
                 let bar_layout = Layout::horizontal([Constraint::Length(10), Constraint::Min(20)])
                     .split(cpu_layout[i]);
                 let gauge = Gauge::default()
@@ -86,21 +85,26 @@ fn main() -> Result<(), io::Error> {
                 frame.render_widget(gauge, bar_layout[1]);
             }
 
+            prev_cpus = curr_cpus;
+
             let stat: Vec<String> = vec![
-                format!("Memory: {}MB/{}MB", used_memory, total_memory),
+                format!("Memory: {}MB/{}MB", used_memory / 1024, total_memory / 1024),
                 format!("Swap: {}MB/{}MB", used_swap, total_swap),
-                format!("Uptime: {}", uptime_format),
+                format!("Uptime: {}", uptime),
+                format!(
+                    "Tasks: {}, Running: {}, Threads: {}",
+                    total_task, running_task, total_threads
+                ),
             ];
 
-            frame.render_widget(Paragraph::new(stat.join("\n")), system_layout[0]);
+            frame.render_widget(Paragraph::new(stat.join("\n")).centered(), system_layout[0]);
 
             match sorting_mode {
                 SortingMode::Memory => {
-                    processes.sort_by(|a, b| b.1.memory().partial_cmp(&a.1.memory()).unwrap());
+                    processes.sort_by(|a, b| b.memory.partial_cmp(&a.memory).unwrap());
                 }
                 SortingMode::Cpu => {
-                    processes
-                        .sort_by(|a, b| b.1.cpu_usage().partial_cmp(&a.1.cpu_usage()).unwrap());
+                    processes.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap());
                 }
             }
 
@@ -115,29 +119,13 @@ fn main() -> Result<(), io::Error> {
             let visible = processes.iter().skip(start).take(visible_height);
 
             let rows: Vec<Row> = visible
-                .map(|(pid, process)| {
-                    let display_name = if !process.cmd().is_empty() {
-                        let name: Vec<&str> = process
-                            .cmd()
-                            .iter()
-                            .filter_map(|part| part.to_str())
-                            .collect();
-                        format!("{}", name.join(" "))
-                    } else if process.exe().unwrap() == "" {
-                        format!("{:?}", process.name())
-                    } else {
-                        format!("{:?}", process.exe())
-                    };
+                .map(|p| {
                     Row::new(vec![
-                        pid.to_string(),
-                        format!("{}", display_name),
-                        format!("{:.2}", process.cpu_usage()),
-                        format!("{:.2}", process.virtual_memory() / mb),
-                        format!("{}", process.memory() / mb),
-                        format!("{}", process.status()),
-                        format!("{}", process.disk_usage().total_read_bytes / mb),
-                        format!("{}", process.disk_usage().total_written_bytes / mb),
-                        format!("{:?}", process.start_time()),
+                        p.pid.to_string(),
+                        p.name.to_string(),
+                        p.cpu.to_string(),
+                        p.memory.to_string(),
+                        p.status.to_string(),
                     ])
                 })
                 .collect();
@@ -152,26 +140,11 @@ fn main() -> Result<(), io::Error> {
                     Constraint::Length(10),
                     Constraint::Length(10),
                     Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
-                    Constraint::Length(10),
                 ],
             )
             .row_highlight_style(Style::default().bg(Color::DarkGray))
             .header(
-                Row::new(vec![
-                    "PID",
-                    "Process",
-                    "CPU %",
-                    "Virt Mem",
-                    "Memory",
-                    "Status",
-                    "Disk Read",
-                    "Disk Write",
-                    "Start Time",
-                ])
-                .style(
+                Row::new(vec!["PID", "Process", "CPU %", "Memory", "Status"]).style(
                     Style::default()
                         .black()
                         .add_modifier(Modifier::BOLD)

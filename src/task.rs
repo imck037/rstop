@@ -1,6 +1,6 @@
 use std::{fs, io::Read};
 
-fn is_pid(str: &str) -> bool {
+pub fn is_pid(str: &str) -> bool {
     str.chars().all(|c| c.is_numeric())
 }
 
