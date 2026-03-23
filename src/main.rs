@@ -46,7 +46,10 @@ fn main() -> Result<(), io::Error> {
 
             let layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([Constraint::Max((cpus.len()) as u16), Constraint::Min(10)])
+                .constraints([
+                    Constraint::Max((cpus.len() - 1) as u16),
+                    Constraint::Min(10),
+                ])
                 .split(area);
 
             let (total_memory, used_memory, ..) = system::get_memory();
@@ -68,10 +71,10 @@ fn main() -> Result<(), io::Error> {
 
             let cpu_layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints(cpus.iter().map(|_| Constraint::Length(1)))
+                .constraints(cpus.iter().skip(1).map(|_| Constraint::Length(1)))
                 .split(system_layout[1]);
 
-            for (i, cpu) in cpus.iter().enumerate() {
+            for (i, cpu) in cpus.iter().skip(1).enumerate() {
                 let usage = cpu.usage;
                 let name = cpu.id.to_string();
                 let bar_layout = Layout::horizontal([Constraint::Length(10), Constraint::Min(20)])
