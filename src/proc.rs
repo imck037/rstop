@@ -10,7 +10,7 @@ pub struct Process {
     pub name: String,
     pub status: String,
     pub cpu: usize,
-    pub memory: String,
+    pub memory: usize,
 }
 
 pub fn get_process() -> Vec<Process> {
@@ -18,7 +18,7 @@ pub fn get_process() -> Vec<Process> {
     if let Ok(entries) = fs::read_dir("/proc") {
         for entry in entries.flatten() {
             let mut name = String::new();
-            let mut memory = String::new();
+            let mut memory: usize = 0;
             let mut cpu: usize = 0;
             let mut status = String::new();
             let filename = entry.file_name();
@@ -29,10 +29,11 @@ pub fn get_process() -> Vec<Process> {
             let stat_path = format!("/proc/{}/stat", pid);
 
             if let Ok(content) = fs::read_to_string(stat_path) {
-                let parts: Vec<&str> = content.split_whitespace().collect();
-                name = parts[1].to_string();
-                status = parts[3].to_string();
-                cpu = parts[13].parse::<usize>().unwrap() + parts[14].parse::<usize>().unwrap();
+                let start = content.find(")").unwrap();
+                let values = &content[start + 1..].trim();
+                let parts: Vec<&str> = values.split_whitespace().collect();
+                status = parts[0].to_string();
+                cpu = parts[11].parse::<usize>().unwrap() + parts[12].parse::<usize>().unwrap();
             }
 
             let status_path = format!("/proc/{}/status", pid);
@@ -41,10 +42,11 @@ pub fn get_process() -> Vec<Process> {
                 let reader = BufReader::new(status_file);
                 for line in reader.lines() {
                     let content = line.unwrap();
-                    if content.starts_with("VmRSS") {
-                        let content_parts: Vec<&str> = content.split(":").collect();
-                        memory = content_parts[1].trim().to_string();
-                        break;
+                    let parts: Vec<&str> = content.split_whitespace().collect();
+                    match parts[0] {
+                        "Name:" => name = parts[1].to_string(),
+                        "VmRSS:" => memory = parts[1].parse::<usize>().unwrap(),
+                        _ => {}
                     }
                 }
             }
