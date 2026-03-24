@@ -13,7 +13,7 @@
 
 
 ## Preview
-![App Screenshot](./assets/rstop.png.png)
+![App Screenshot](./assets/rstop.png)
 
 ## Installation
 
