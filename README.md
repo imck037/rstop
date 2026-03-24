@@ -13,7 +13,7 @@
 
 
 ## Preview
-![App Screenshot](./assets/2026-03-23-191506_hyprshot.png)
+![App Screenshot](./assets/rstop.png.png)
 
 ## Installation
 
