@@ -2,6 +2,7 @@ mod proc;
 mod system;
 mod task;
 mod test;
+use std::collections::HashMap;
 use std::{io, time::Duration};
 
 use crossterm::{
@@ -24,6 +25,11 @@ enum SortingMode {
     Memory,
 }
 
+struct ProcessCache {
+    prev_proc: HashMap<usize, usize>,
+    prev_total: usize,
+}
+
 fn main() -> Result<(), io::Error> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -36,6 +42,14 @@ fn main() -> Result<(), io::Error> {
 
     let mut sorting_mode = SortingMode::Memory;
     let mut selected = 0usize;
+
+    let mut proc_cache = ProcessCache {
+        prev_proc: HashMap::new(),
+        prev_total: proc::get_cpu_total_idle(),
+    };
+
+    let core_count = prev_cpus.len() - 1;
+
     loop {
         let mut processes = proc::get_process();
 
@@ -46,10 +60,7 @@ fn main() -> Result<(), io::Error> {
 
             let layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Max((cpus.len() - 1) as u16),
-                    Constraint::Min(10),
-                ])
+                .constraints([Constraint::Max((core_count) as u16), Constraint::Min(10)])
                 .split(area);
 
             let (total_memory, used_memory, ..) = system::get_memory();
@@ -89,6 +100,7 @@ fn main() -> Result<(), io::Error> {
             }
 
             prev_cpus = curr_cpus;
+            let curr_total = proc::get_cpu_total_idle();
 
             let stat: Vec<String> = vec![
                 format!("Memory: {}MB/{}MB", used_memory / 1024, total_memory / 1024),
@@ -119,10 +131,20 @@ fn main() -> Result<(), io::Error> {
                 0
             };
 
-            let visible = processes.iter().skip(start).take(visible_height);
+            let visible = processes.iter_mut().skip(start).take(visible_height);
 
             let rows: Vec<Row> = visible
                 .map(|p| {
+                    let prev = proc_cache.prev_proc.get(&p.pid).copied().unwrap_or(0);
+
+                    let delta_proc = p.cpu_time.saturating_sub(prev);
+                    let delta_total = curr_total.saturating_sub(proc_cache.prev_total);
+
+                    if delta_total > 0 {
+                        p.cpu_usage =
+                            (delta_proc as f64 / delta_total as f64) * 100.0 * core_count as f64;
+                    }
+                    proc_cache.prev_proc.insert(p.pid, p.cpu_time);
                     Row::new(vec![
                         p.pid.to_string(),
                         p.name.to_string(),
@@ -133,6 +155,7 @@ fn main() -> Result<(), io::Error> {
                 })
                 .collect();
 
+            proc_cache.prev_total = curr_total;
             let mut state = TableState::default();
             state.select(Some(selected - start));
             let table = Table::new(

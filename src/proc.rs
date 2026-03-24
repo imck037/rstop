@@ -6,9 +6,10 @@ use std::{
 use crate::task::is_pid;
 
 pub struct Process {
-    pub pid: String,
+    pub pid: usize,
     pub name: String,
     pub status: String,
+    pub cpu_time: usize,
     pub cpu_usage: f64,
     pub memory: usize,
 }
@@ -16,9 +17,11 @@ pub struct Process {
 pub fn get_cpu_total_idle() -> usize {
     let stat_details = fs::read_to_string("/proc/stat").unwrap();
     let line = stat_details.lines().next().unwrap();
-    let stat: Vec<&str> = line[3..].split_whitespace().collect();
-    let total = stat.iter().map(|num| num.parse::<usize>().unwrap()).sum();
-    total
+
+    line.split_whitespace()
+        .skip(1)
+        .map(|num| num.parse::<usize>().unwrap())
+        .sum()
 }
 
 pub fn get_process() -> Vec<Process> {
@@ -28,7 +31,8 @@ pub fn get_process() -> Vec<Process> {
             let mut name = String::new();
             let mut memory: usize = 0;
             let mut status = String::new();
-            let mut cpu_usage: f64 = 0.0;
+            let mut cpu_time = 0;
+            let cpu_usage: f64 = 0.0;
             let filename = entry.file_name();
             let pid = filename.to_string_lossy();
             if !is_pid(&pid) {
@@ -41,9 +45,8 @@ pub fn get_process() -> Vec<Process> {
                 let values = &content[start + 1..].trim();
                 let parts: Vec<&str> = values.split_whitespace().collect();
                 status = parts[0].to_string();
-                let cpu_time =
+                cpu_time =
                     parts[11].parse::<usize>().unwrap() + parts[12].parse::<usize>().unwrap();
-                cpu_usage = (cpu_time as f64 / get_cpu_total_idle() as f64) * 100.0;
             }
 
             let status_path = format!("/proc/{}/status", pid);
@@ -61,9 +64,10 @@ pub fn get_process() -> Vec<Process> {
                 }
             }
             let ps1 = Process {
-                pid: pid.to_string(),
+                pid: pid.parse::<usize>().unwrap(),
                 name,
                 status,
+                cpu_time,
                 memory,
                 cpu_usage,
             };
