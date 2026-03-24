@@ -107,7 +107,7 @@ fn main() -> Result<(), io::Error> {
                     processes.sort_by(|a, b| b.memory.partial_cmp(&a.memory).unwrap());
                 }
                 SortingMode::Cpu => {
-                    processes.sort_by(|a, b| b.cpu.partial_cmp(&a.cpu).unwrap());
+                    processes.sort_by(|a, b| b.cpu_usage.partial_cmp(&a.cpu_usage).unwrap());
                 }
             }
 
@@ -126,7 +126,7 @@ fn main() -> Result<(), io::Error> {
                     Row::new(vec![
                         p.pid.to_string(),
                         p.name.to_string(),
-                        p.cpu.to_string(),
+                        format!("{:.2}", p.cpu_usage),
                         p.memory.to_string(),
                         p.status.to_string(),
                     ])
