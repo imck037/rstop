@@ -6,10 +6,12 @@
 ## Features
 
 * Real-time system monitoring (CPU, memory, processes)
+* Process kill fetures with multiple signal option
 * Interactive terminal UI
 * Vim keybindings
 * Clean and minimal interface
 * Written in Rust for performance and safety
+* Less Cpu usage than htop
 
 
 ## Preview
@@ -54,6 +56,7 @@ Run it:
 | `c`     | Sort by cpu           |
 | `m`     | Sort by memory        |
 | `r`     | Refresh               |
+| `<CR>`  | Open Kill Window      |
 
 
 ## Built With
@@ -96,10 +99,3 @@ This project is licensed under the MIT License.
 
 * Inspired by `htop`
 * Thanks to the Rust community 
-
-## Future Improvements
-
-* [ ] Network usage stats
-* [ ] Disk I/O monitoring
-* [ ] Config file support
-* [ ] Theming support
