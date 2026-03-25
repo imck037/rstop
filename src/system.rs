@@ -53,7 +53,12 @@ pub fn get_uptime() -> String {
     let uptime_stat: Vec<&str> = read_uptime.split(".").collect();
     let uptime: usize = uptime_stat[0].parse::<usize>().unwrap();
 
-    let uptime_format = format!("{}:{}:{}", uptime / 3600, (uptime % 3600) / 60, uptime % 60);
+    let uptime_format = format!(
+        "{:02}:{:02}:{:02}",
+        uptime / 3600,
+        (uptime % 3600) / 60,
+        uptime % 60
+    );
     uptime_format
 }
 
