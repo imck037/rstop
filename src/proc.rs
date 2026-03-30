@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, BufReader},
 };
 
-use crate::task::is_pid;
+use crate::{app::App, task::is_pid};
 
 pub struct Process {
     pub pid: usize,
@@ -22,6 +22,19 @@ pub fn get_cpu_total_idle() -> usize {
         .skip(1)
         .map(|num| num.parse::<usize>().unwrap())
         .sum()
+}
+
+pub fn get_cpu_usage(p: &mut Process, app: &mut App) {
+    let prev = app.proc_cache.prev_proc.get(&p.pid).copied().unwrap_or(0);
+
+    let curr_total = get_cpu_total_idle();
+    let delta_proc = p.cpu_time.saturating_sub(prev);
+    let delta_total = curr_total.saturating_sub(app.proc_cache.prev_total);
+
+    if delta_total > 0 {
+        p.cpu_usage = (delta_proc as f64 / delta_total as f64) * 100.0 * app.core_count as f64;
+    }
+    app.proc_cache.prev_proc.insert(p.pid, p.cpu_time);
 }
 
 pub fn get_process() -> Vec<Process> {
