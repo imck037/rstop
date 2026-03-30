@@ -7,8 +7,8 @@ mod task;
 mod test;
 mod ui;
 use crate::ui::render_ui;
-use std::collections::HashMap;
 use std::io;
+use std::{collections::HashMap, time::Duration};
 
 use crossterm::{
     self,
@@ -75,13 +75,15 @@ fn main() -> Result<(), io::Error> {
             render_ui(frame, &mut app, &mut processes);
         })?;
 
-        if let Event::Key(key) = event::read()? {
-            if let UiMode::Normal = app.ui_mode {
-                if key.code == KeyCode::Char('q') {
-                    break;
+        if event::poll(Duration::from_millis(1000))? {
+            if let Event::Key(key) = event::read()? {
+                if let UiMode::Normal = app.ui_mode {
+                    if key.code == KeyCode::Char('q') {
+                        break;
+                    }
                 }
+                events::handle_events(key, &mut app, &processes);
             }
-            events::handle_events(key, &mut app, processes);
         }
     }
     disable_raw_mode()?;

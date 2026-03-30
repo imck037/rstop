@@ -2,7 +2,7 @@ use crate::signal::{SIGNALS, send_signal};
 use crate::{SortingMode, UiMode, app::App, proc::Process};
 use crossterm::event::{KeyCode, KeyEvent};
 
-pub fn handle_events(key: KeyEvent, app: &mut App, processes: Vec<Process>) {
+pub fn handle_events(key: KeyEvent, app: &mut App, processes: &Vec<Process>) {
     match app.ui_mode {
         UiMode::Normal => match key.code {
             KeyCode::Down | KeyCode::Char('j') => {
