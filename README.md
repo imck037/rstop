@@ -1,6 +1,6 @@
 # `Rstop`
 
-> A fast, lightweight, and customizable system monitor CLI inspired by `htop`, written in Rust.
+A fast, lightweight, and customizable system monitor CLI inspired by `htop`, written in Rust.
 
 
 ## Features
@@ -18,7 +18,10 @@
 ![App Screenshot](./assets/rstop.png)
 
 ## Installation
-
+### Install the latest release
+```
+curl -sSL https://raw.githubusercontent.com/imck037/rstop/main/install.sh | bash
+```
 ### From Source
 
 Make sure you have Rust installed:
@@ -71,6 +74,10 @@ Run it:
 ```
 src/
 ├── main.rs
+├── app.rs
+├── ui.rs
+├── events.rs
+├── signal.rs
 ├── proc.rs
 ├── system.rs
 ├── test.rs
