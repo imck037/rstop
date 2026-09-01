@@ -1,4 +1,12 @@
-use crate::{ProcessCache, SortingMode, UiMode, system::CpuState};
+use crate::{
+    ProcessCache, SortingMode, UiMode,
+    system::{CpuState, CpuUsage},
+};
+
+pub struct Dashboard {
+    pub cpus: Vec<CpuUsage>,
+    pub stats: Vec<String>,
+}
 
 pub struct App {
     pub ui_mode: UiMode,
@@ -8,4 +16,5 @@ pub struct App {
     pub proc_cache: ProcessCache,
     pub prev_cpus: Vec<CpuState>,
     pub core_count: usize,
+    pub dashboard: Dashboard,
 }

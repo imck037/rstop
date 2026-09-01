@@ -1,9 +1,4 @@
-use crate::{
-    SortingMode, UiMode,
-    app::App,
-    proc::{self, Process},
-    signal, system, task,
-};
+use crate::{SortingMode, UiMode, app::App, proc::Process, signal, system, task};
 
 use ratatui::layout::Rect;
 use ratatui::widgets::Clear;
@@ -14,18 +9,10 @@ use ratatui::{
     widgets::{Block, Borders, Gauge, Paragraph, Row, Table, TableState},
 };
 
-pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>) {
-    let area = frame.area();
+pub fn update_dashboard(app: &mut App) {
     let curr_cpus = system::get_cpu_stat();
-    let cpus = system::get_cpu_usage(&app.prev_cpus, &curr_cpus);
-
-    let layout = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Max((app.core_count) as u16),
-            Constraint::Min(10),
-        ])
-        .split(area);
+    app.dashboard.cpus = system::get_cpu_usage(&app.prev_cpus, &curr_cpus);
+    app.prev_cpus = curr_cpus;
 
     let (total_memory, used_memory, ..) = system::get_memory();
 
@@ -36,8 +23,27 @@ pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>)
         used_swap = used / 1024;
     }
 
-    let uptime = system::get_uptime();
     let (total_task, running_task, .., total_threads) = task::tasks();
+    app.dashboard.stats = vec![
+        format!("Memory: {}MB/{}MB", used_memory / 1024, total_memory / 1024),
+        format!("Swap: {}MB/{}MB", used_swap, total_swap),
+        format!("Uptime: {}", system::get_uptime()),
+        format!(
+            "Tasks: {}, Running: {}, Threads: {}",
+            total_task, running_task, total_threads
+        ),
+    ];
+}
+
+pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>) {
+    let area = frame.area();
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Max((app.core_count) as u16),
+            Constraint::Min(10),
+        ])
+        .split(area);
 
     let system_layout = Layout::default()
         .direction(Direction::Horizontal)
@@ -46,10 +52,16 @@ pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>)
 
     let cpu_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(cpus.iter().skip(1).map(|_| Constraint::Length(1)))
+        .constraints(
+            app.dashboard
+                .cpus
+                .iter()
+                .skip(1)
+                .map(|_| Constraint::Length(1)),
+        )
         .split(system_layout[1]);
 
-    for (i, cpu) in cpus.iter().skip(1).enumerate() {
+    for (i, cpu) in app.dashboard.cpus.iter().skip(1).enumerate() {
         let usage = cpu.usage;
         let name = cpu.id.to_string();
         let bar_layout =
@@ -63,19 +75,10 @@ pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>)
         frame.render_widget(gauge, bar_layout[1]);
     }
 
-    app.prev_cpus = curr_cpus;
-
-    let stat: Vec<String> = vec![
-        format!("Memory: {}MB/{}MB", used_memory / 1024, total_memory / 1024),
-        format!("Swap: {}MB/{}MB", used_swap, total_swap),
-        format!("Uptime: {}", uptime),
-        format!(
-            "Tasks: {}, Running: {}, Threads: {}",
-            total_task, running_task, total_threads
-        ),
-    ];
-
-    frame.render_widget(Paragraph::new(stat.join("\n")).centered(), system_layout[0]);
+    frame.render_widget(
+        Paragraph::new(app.dashboard.stats.join("\n")).centered(),
+        system_layout[0],
+    );
 
     match app.sorting_mode {
         SortingMode::Memory => {
@@ -94,11 +97,10 @@ pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>)
         0
     };
 
-    let visible = processes.iter_mut().skip(start).take(visible_height);
+    let visible = processes.iter().skip(start).take(visible_height);
 
     let rows: Vec<Row> = visible
         .map(|p| {
-            proc::get_cpu_usage(p, app);
             Row::new(vec![
                 p.pid.to_string(),
                 p.name.to_string(),
@@ -109,7 +111,6 @@ pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>)
         })
         .collect();
 
-    app.proc_cache.prev_total = proc::get_cpu_total_idle();
     let mut state = TableState::default();
     state.select(Some(app.process_selected - start));
     let table = Table::new(

@@ -6,9 +6,12 @@ mod system;
 mod task;
 mod test;
 mod ui;
-use crate::ui::render_ui;
+use crate::ui::{render_ui, update_dashboard};
 use std::io;
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use crossterm::{
     self,
@@ -19,7 +22,7 @@ use crossterm::{
 
 use ratatui::{Terminal, backend::CrosstermBackend};
 
-use crate::app::App;
+use crate::app::{App, Dashboard};
 
 #[derive(PartialEq)]
 enum SortingMode {
@@ -66,16 +69,25 @@ fn main() -> Result<(), io::Error> {
         core_count: core_count,
         prev_cpus: prev_cpus,
         proc_cache: proc_cache,
+        dashboard: Dashboard {
+            cpus: Vec::new(),
+            stats: Vec::new(),
+        },
     };
 
-    loop {
-        let mut processes = proc::get_process();
+    let mut processes = proc::get_process();
+    proc::update_cpu_usage(&mut processes, &mut app);
+    update_dashboard(&mut app);
+    let refresh_interval = Duration::from_secs(1);
+    let mut last_refresh = Instant::now();
 
+    loop {
         terminal.draw(|frame| {
             render_ui(frame, &mut app, &mut processes);
         })?;
 
-        if event::poll(Duration::from_millis(1000))? {
+        let remaining = refresh_interval.saturating_sub(last_refresh.elapsed());
+        if event::poll(remaining)? {
             if let Event::Key(key) = event::read()? {
                 if let UiMode::Normal = app.ui_mode {
                     if key.code == KeyCode::Char('q') {
@@ -84,6 +96,13 @@ fn main() -> Result<(), io::Error> {
                 }
                 events::handle_events(key, &mut app, &processes);
             }
+        }
+
+        if last_refresh.elapsed() >= refresh_interval {
+            processes = proc::get_process();
+            proc::update_cpu_usage(&mut processes, &mut app);
+            update_dashboard(&mut app);
+            last_refresh = Instant::now();
         }
     }
     disable_raw_mode()?;

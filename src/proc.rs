@@ -24,17 +24,30 @@ pub fn get_cpu_total_idle() -> usize {
         .sum()
 }
 
-pub fn get_cpu_usage(p: &mut Process, app: &mut App) {
-    let prev = app.proc_cache.prev_proc.get(&p.pid).copied().unwrap_or(0);
-
+pub fn update_cpu_usage(processes: &mut [Process], app: &mut App) {
     let curr_total = get_cpu_total_idle();
-    let delta_proc = p.cpu_time.saturating_sub(prev);
-    let delta_total = curr_total.saturating_sub(app.proc_cache.prev_total);
 
-    if delta_total > 0 {
-        p.cpu_usage = (delta_proc as f64 / delta_total as f64) * 100.0 * app.core_count as f64;
+    for process in processes {
+        let prev = app
+            .proc_cache
+            .prev_proc
+            .get(&process.pid)
+            .copied()
+            .unwrap_or(process.cpu_time);
+        let delta_proc = process.cpu_time.saturating_sub(prev);
+        let delta_total = curr_total.saturating_sub(app.proc_cache.prev_total);
+
+        process.cpu_usage = if delta_total == 0 {
+            0.0
+        } else {
+            (delta_proc as f64 / delta_total as f64) * 100.0 * app.core_count as f64
+        };
+        app.proc_cache
+            .prev_proc
+            .insert(process.pid, process.cpu_time);
     }
-    app.proc_cache.prev_proc.insert(p.pid, p.cpu_time);
+
+    app.proc_cache.prev_total = curr_total;
 }
 
 pub fn get_process() -> Vec<Process> {
