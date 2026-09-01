@@ -35,7 +35,14 @@ pub fn update_dashboard(app: &mut App) {
     ];
 }
 
-pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>) {
+pub fn sort_processes(processes: &mut [Process], sorting_mode: &SortingMode) {
+    match sorting_mode {
+        SortingMode::Memory => processes.sort_by(|a, b| b.memory.cmp(&a.memory)),
+        SortingMode::Cpu => processes.sort_by(|a, b| b.cpu_usage.total_cmp(&a.cpu_usage)),
+    }
+}
+
+pub fn render_ui(frame: &mut Frame, app: &App, processes: &[Process]) {
     let area = frame.area();
     let layout = Layout::default()
         .direction(Direction::Vertical)
@@ -79,15 +86,6 @@ pub fn render_ui(frame: &mut Frame, app: &mut App, processes: &mut Vec<Process>)
         Paragraph::new(app.dashboard.stats.join("\n")).centered(),
         system_layout[0],
     );
-
-    match app.sorting_mode {
-        SortingMode::Memory => {
-            processes.sort_by(|a, b| b.memory.partial_cmp(&a.memory).unwrap());
-        }
-        SortingMode::Cpu => {
-            processes.sort_by(|a, b| b.cpu_usage.partial_cmp(&a.cpu_usage).unwrap());
-        }
-    }
 
     let visible_height = layout[1].height as usize - 3;
 

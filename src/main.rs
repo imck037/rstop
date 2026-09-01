@@ -6,7 +6,7 @@ mod system;
 mod task;
 mod test;
 mod ui;
-use crate::ui::{render_ui, update_dashboard};
+use crate::ui::{render_ui, sort_processes, update_dashboard};
 use std::io;
 use std::{
     collections::HashMap,
@@ -80,11 +80,16 @@ fn main() -> Result<(), io::Error> {
     update_dashboard(&mut app);
     let refresh_interval = Duration::from_secs(1);
     let mut last_refresh = Instant::now();
+    sort_processes(&mut processes, &app.sorting_mode);
+    let mut redraw = true;
 
     loop {
-        terminal.draw(|frame| {
-            render_ui(frame, &mut app, &mut processes);
-        })?;
+        if redraw {
+            terminal.draw(|frame| {
+                render_ui(frame, &app, &processes);
+            })?;
+            redraw = false;
+        }
 
         let remaining = refresh_interval.saturating_sub(last_refresh.elapsed());
         if event::poll(remaining)? {
@@ -94,7 +99,12 @@ fn main() -> Result<(), io::Error> {
                         break;
                     }
                 }
-                events::handle_events(key, &mut app, &processes);
+                if events::handle_events(key, &mut app, &processes) {
+                    if matches!(key.code, KeyCode::Char('c') | KeyCode::Char('m')) {
+                        sort_processes(&mut processes, &app.sorting_mode);
+                    }
+                    redraw = true;
+                }
             }
         }
 
@@ -102,7 +112,9 @@ fn main() -> Result<(), io::Error> {
             processes = proc::get_process();
             proc::update_cpu_usage(&mut processes, &mut app);
             update_dashboard(&mut app);
+            sort_processes(&mut processes, &app.sorting_mode);
             last_refresh = Instant::now();
+            redraw = true;
         }
     }
     disable_raw_mode()?;
